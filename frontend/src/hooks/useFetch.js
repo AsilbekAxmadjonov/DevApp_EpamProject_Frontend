@@ -1,3 +1,4 @@
+import { header } from "framer-motion/client";
 import { useState, useCallback } from "react";
 
 // Set your backend base URL here
@@ -6,16 +7,20 @@ const BASE_URL = "http://localhost:8080";
 export const useFetch = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const {token} = localStorage.getItem("AuthData");
 
   const request = useCallback(
     async (url, method = "GET", body = null, headers = {}) => {
       try {
         setLoading(true);
+ 
 
         // If body is provided and not FormData, convert to JSON
         if (body && !(body instanceof FormData)) {
           body = JSON.stringify(body);
           headers["Content-Type"] = "application/json";
+          headers["Authorization"] = `Bearer ${token}`;
+
         }
 
         const res = await fetch(`${BASE_URL}${url}`, {
