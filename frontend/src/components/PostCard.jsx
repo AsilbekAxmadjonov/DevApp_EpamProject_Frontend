@@ -23,8 +23,10 @@ import { toast } from "react-toastify";
 
 export default function PostCard({ post }) {
   const [comments, setComments] = useState([]);
-  const [likesCount, setLikesCount] = useState(post.likes || 0);
+  const [likesCount, setLikesCount] = useState(Number(post.likes) || 0);
   const [isLiked, setIsLiked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
+
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -41,6 +43,16 @@ export default function PostCard({ post }) {
   const isMyPost =
     Number(post.userId) === Number(userId) || post.username === username;
 
+  // --- helpers ---
+  const parseCount = (v) => {
+    if (Number.isFinite(v)) return v;
+    if (typeof v === "string" && !Number.isNaN(+v)) return +v;
+    if (v && Number.isFinite(v.count)) return v.count;
+    if (v && Number.isFinite(v.total)) return v.total;
+    return 0;
+  };
+
+  // voices
   useEffect(() => {
     const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
     loadVoices();
@@ -48,6 +60,7 @@ export default function PostCard({ post }) {
     return () => (window.speechSynthesis.onvoiceschanged = null);
   }, []);
 
+  // comments
   useEffect(() => {
     (async () => {
       try {
@@ -75,39 +88,77 @@ export default function PostCard({ post }) {
     })();
   }, [post.id, request]);
 
+  // likes count
   useEffect(() => {
     (async () => {
       try {
-        const likeCount = await request(
+        const res = await request(
           `/api/v1/likes/post/${post.id}/likesCount`,
           "GET"
         );
-        setLikesCount(Number.isFinite(likeCount) ? likeCount : 0);
+        setLikesCount(parseCount(res));
       } catch (err) {
         console.error(err);
       }
     })();
   }, [post.id, request]);
 
+  // like / unlike (same endpoints you had, plus safety)
   const handleLike = async () => {
+    if (likeBusy) return;
+    if (!userId) {
+      toast.error("Please log in again.");
+      return;
+    }
+    setLikeBusy(true);
+
+    const prevLiked = isLiked;
+    const prevCount = likesCount;
+
+    // optimistic UI
+    setIsLiked(!prevLiked);
+    setLikesCount((c) => Math.max(0, c + (prevLiked ? -1 : +1)));
+
     try {
-      if (!isLiked) {
+      if (!prevLiked) {
+        // like
         await request(`/api/v1/likes/like`, "POST", {
           userId,
           postId: post.id,
         });
-        setLikesCount((prev) => prev + 1);
       } else {
-        await request(`/api/v1/likes/unlike`, "POST", {
-          userId,
-          postId: post.id,
-        });
-        setLikesCount((prev) => Math.max(0, prev - 1));
+        // unlike (first try the original POST; if API expects DELETE, fallback)
+        try {
+          await request(`/api/v1/likes/unlike`, "POST", {
+            userId,
+            postId: post.id,
+          });
+        } catch {
+          await request(
+            `/api/v1/likes/unlike?userId=${userId}&postId=${post.id}`,
+            "DELETE"
+          );
+        }
       }
-      setIsLiked(!isLiked);
+
+      // refresh server count to avoid drift
+      try {
+        const fresh = await request(
+          `/api/v1/likes/post/${post.id}/likesCount`,
+          "GET"
+        );
+        setLikesCount(parseCount(fresh));
+      } catch {
+        console.error("Failed to refresh likes count");
+      }
     } catch (err) {
       console.error(err);
+      // revert on failure
+      setIsLiked(prevLiked);
+      setLikesCount(prevCount);
       toast.error("Failed to update like status");
+    } finally {
+      setLikeBusy(false);
     }
   };
 
@@ -201,7 +252,7 @@ export default function PostCard({ post }) {
   };
 
   return (
-    <Card className="shadow-lg border-0 glass text-white">
+    <Card className="shadow-lg border-0 glass text-white max-w-[500px] w-full mx-auto">
       {post.image && (
         <Card.Img
           style={{ width: "100%", objectFit: "cover", maxHeight: "320px" }}
@@ -253,6 +304,8 @@ export default function PostCard({ post }) {
             variant={isLiked ? "light" : "outline-light"}
             size="sm"
             onClick={handleLike}
+            disabled={likeBusy}
+            aria-pressed={isLiked}
             className="d-flex align-items-center gap-1 rounded-pill"
           >
             {isLiked ? <HeartFill /> : <Heart />}
@@ -399,7 +452,6 @@ export default function PostCard({ post }) {
         </Collapse>
       </Card.Body>
 
-      {/* Edit Post Modal */}
       <Modal show={editPostOpen} onHide={() => setEditPostOpen(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Edit Post</Modal.Title>

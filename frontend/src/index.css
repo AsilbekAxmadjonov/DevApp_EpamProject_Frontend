@@ -3,28 +3,47 @@
 /* Global gradient background with subtle pattern */
 :root {
   --bg1: 255 255 255; /* light glass */
-  --bg2: 15 23 42;    /* slate-900 */
+  --bg2: 15 23 42; /* slate-900 */
 }
 
-html, body, #root {
+/* Hide scrollbars (keeps scroll behavior) */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge legacy */
+}
+*::-webkit-scrollbar {
+  /* Chrome/Safari/Edge */
+  display: none;
+}
+
+html,
+body,
+#root {
   height: 100%;
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 10% -20%, rgba(79,70,229,.25), transparent 60%),
-    radial-gradient(900px 600px at 90% 120%, rgba(59,130,246,.22), transparent 60%),
+  background: radial-gradient(
+      1200px 600px at 10% -20%,
+      rgba(79, 70, 229, 0.25),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 600px at 90% 120%,
+      rgba(59, 130, 246, 0.22),
+      transparent 60%
+    ),
     linear-gradient(135deg, #0f172a, #111827 60%, #0b1022);
   color: #0b1220;
 }
 
 /* Glass card utility */
 .glass {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow: 0 8px 30px rgba(0,0,0,.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
 }
 
 /* Pretty buttons */
