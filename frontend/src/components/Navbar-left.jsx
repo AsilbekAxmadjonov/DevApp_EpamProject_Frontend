@@ -5,6 +5,7 @@ import {
   Bookmark,
   User,
   BoxArrowRight,
+  Person
 } from "react-bootstrap-icons";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
@@ -39,7 +40,7 @@ export default function LeftNav() {
         {item("/home", "Home", House)}
         {item("/create", "Create", PlusSquare)}
         {item("/bookmarks", "Bookmarks", Bookmark)}
-        {item("/profile", "Profile", User)}
+        {item("/profile", "Profile", Person)}
         <button
           className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl text-white/80 hover:bg-white/10 hover:text-white"
           onClick={() => {
