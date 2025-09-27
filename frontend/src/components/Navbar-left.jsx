@@ -3,9 +3,8 @@ import {
   House,
   PlusSquare,
   Bookmark,
-  User,
   BoxArrowRight,
-  Person
+  Person,
 } from "react-bootstrap-icons";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
