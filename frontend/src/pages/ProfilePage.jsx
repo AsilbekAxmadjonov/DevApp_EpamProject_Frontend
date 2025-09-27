@@ -1,23 +1,17 @@
-import { useState, useEffect, useContext, useRef } from "react";
-import { Container, Card, Row, Col, Button, Form } from "react-bootstrap";
+import { useState, useEffect, useContext } from "react";
+import { Container, Card, Row, Col, Button } from "react-bootstrap";
 import { PersonCircle } from "react-bootstrap-icons";
 import { useFetch } from "../hooks/useFetch";
 import { ToastContainer, toast } from "react-toastify";
 import Loader from "../components/Loader";
 import { AuthContext } from "../context/AuthContext";
+import PostCard from "../components/PostCard";
 
 export default function ProfilePage() {
-  const [isEditing, setIsEditing] = useState(false);
-  const [user, setUser] = useState({
-    firstName: "",
-    lastName: "",
-    username: "",
-    bio: "",
-    image: "",
-  });
+  const [user, setUser] = useState(null);
+  const [posts, setPosts] = useState([]);
   const { request, loading, error, clearError } = useFetch();
   const auth = useContext(AuthContext);
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (error) {
@@ -27,185 +21,92 @@ export default function ProfilePage() {
   }, [error, clearError]);
 
   useEffect(() => {
-    if (auth) {
-      setUser({
-        firstName: auth.firstName || "",
-        lastName: auth.lastName || "",
-        username: auth.username || "",
-        bio: auth.bio || "",
-        image: auth.image || "",
-      });
-    }
-  }, [auth]);
+    (async () => {
+      try {
+        if (!auth?.userId) return;
+        const u = await request(`/api/v1/user/${auth.userId}`, "GET");
+        setUser(u || null);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setUser((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () =>
-      setUser((prev) => ({ ...prev, image: reader.result }));
-    reader.readAsDataURL(file);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const updatedUser = {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-        bio: user.bio,
-        image: user.image,
-      };
-      const data = await request(
-        `/api/v1/user/${auth.userId}`,
-        "PUT",
-        updatedUser,
-        { Authorization: `Bearer ${auth.token}` }
-      );
-      setUser((prev) => ({ ...prev, ...data }));
-      setIsEditing(false);
-      toast.success("Profile updated successfully!");
-      if (auth.login) {
-        auth.login(
-          auth.userId,
-          auth.token,
-          data.username,
-          data.firstName,
-          data.lastName,
-          data.bio,
-          data.image
+        const myPosts = await request(
+          `/api/v1/posts/getAllPostsByUserId?id=${auth.userId}`,
+          "GET"
         );
+        setPosts(Array.isArray(myPosts) ? myPosts : []);
+      } catch {
+        /* ignore */
       }
-    } catch {
-      toast.error("Failed to update profile.");
-    }
-  };
+    })();
+  }, [auth?.userId, request]);
 
-  if (loading) return <Loader />;
+  if (loading && !user) return <Loader />;
 
   return (
     <Container className="py-4">
-      <Card className="glass text-white">
-        <Card.Body>
-          <Row className="align-items-center">
-            <Col md={2} className="text-center mb-3 mb-md-0">
-              <div
-                style={{ cursor: isEditing ? "pointer" : "default" }}
-                onClick={() => isEditing && fileInputRef.current.click()}
-              >
-                {user.image ? (
-                  <img
-                    src={user.image}
-                    alt="Profile"
-                    className="rounded-circle border border-white/30"
-                    width={90}
-                    height={90}
-                  />
-                ) : (
-                  <PersonCircle size={90} className="opacity-75" />
-                )}
+      <div className="glass text-white rounded-3xl p-5 mb-4">
+        <div className="flex items-center gap-8">
+          <div>
+            {user?.image ? (
+              <img
+                src={user.image}
+                alt="Profile"
+                className="rounded-full w-28 h-28 border border-white/30"
+              />
+            ) : (
+              <PersonCircle size={110} className="opacity-75" />
+            )}
+          </div>
+
+          <div className="flex-1">
+            <div className="flex items-center gap-4">
+              <h2 className="m-0">{user?.username ?? auth.username}</h2>
+              {/* future edit profile here */}
+            </div>
+
+            <div className="flex gap-8 mt-3">
+              <div>
+                <span className="font-bold">{posts.length}</span> posts
               </div>
-              {isEditing && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  ref={fileInputRef}
-                  onChange={handleImageChange}
+              {/* followers / following can be added later */}
+            </div>
+
+            <div className="mt-3">
+              <div className="font-semibold">
+                {`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()}
+              </div>
+              {user?.bio && <div className="text-white/80">{user.bio}</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Row className="g-4">
+        {posts.map((p) => (
+          <Col key={p.id} xs={12} sm={6} md={4}>
+            <Card className="glass h-100">
+              {p.image && (
+                <Card.Img
+                  style={{ width: "100%", objectFit: "cover", height: 220 }}
+                  variant="top"
+                  src={`data:image/jpg;base64,${p.image}`}
                 />
               )}
-            </Col>
-
-            <Col md={8}>
-              {!isEditing ? (
-                <div>
-                  <h4 className="mb-1">{user.username}</h4>
-                  <p className="opacity-75 mb-2">
-                    {user.firstName} {user.lastName}
-                  </p>
-                  {user.bio && <p className="mb-0">{user.bio}</p>}
+              <Card.Body className="text-white">
+                <div className="text-sm opacity-70 mb-1">
+                  {new Date(p.createdAt).toLocaleDateString()}
                 </div>
-              ) : (
-                <Form onSubmit={handleSubmit}>
-                  <Form.Group className="mb-2">
-                    <Form.Label>First Name</Form.Label>
-                    <Form.Control
-                      type="text"
-                      name="firstName"
-                      value={user.firstName}
-                      onChange={handleInputChange}
-                      required
-                      className="bg-transparent text-white"
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-2">
-                    <Form.Label>Last Name</Form.Label>
-                    <Form.Control
-                      type="text"
-                      name="lastName"
-                      value={user.lastName}
-                      onChange={handleInputChange}
-                      required
-                      className="bg-transparent text-white"
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-2">
-                    <Form.Label>Username</Form.Label>
-                    <Form.Control
-                      type="text"
-                      name="username"
-                      value={user.username}
-                      onChange={handleInputChange}
-                      required
-                      className="bg-transparent text-white"
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-2">
-                    <Form.Label>Bio</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      name="bio"
-                      value={user.bio}
-                      onChange={handleInputChange}
-                      rows={3}
-                      className="bg-transparent text-white"
-                    />
-                  </Form.Group>
-                  <div className="d-flex gap-2 mt-2">
-                    <Button
-                      variant="outline-light"
-                      onClick={() => setIsEditing(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button variant="light" type="submit" disabled={loading}>
-                      {loading ? "Saving…" : "Save Changes"}
-                    </Button>
-                  </div>
-                </Form>
-              )}
-            </Col>
+                <div className="fw-semibold mb-1 truncate">
+                  {p.title || "Post"}
+                </div>
+                <div className="opacity-90 line-clamp-3">{p.content}</div>
+              </Card.Body>
+            </Card>
+          </Col>
+        ))}
+        {posts.length === 0 && (
+          <div className="text-center text-white/70 py-10">No posts yet.</div>
+        )}
+      </Row>
 
-            <Col md={2} className="text-end">
-              {!isEditing && (
-                <Button
-                  variant="light"
-                  className="rounded-pill"
-                  onClick={() => setIsEditing(true)}
-                >
-                  Edit Profile
-                </Button>
-              )}
-            </Col>
-          </Row>
-        </Card.Body>
-      </Card>
       <ToastContainer />
     </Container>
   );

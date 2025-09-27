@@ -1,4 +1,3 @@
-import { Col, Row, Container } from "react-bootstrap";
 import PostCard from "../components/PostCard";
 import { useEffect, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
@@ -27,29 +26,13 @@ export default function HomePage() {
   if (loading) return <Loader />;
 
   return (
-    <div className="py-5">
-      <Container>
-        <div className="glass text-white p-4 rounded-4 mb-4">
-          <h1 className="mb-1">Recent Posts</h1>
-          <p className="mb-0 opacity-75">
-            See what the community is building today.
-          </p>
-        </div>
-
-        <Row>
-          {posts.map((post) => (
-            <Col key={post.id} xs={12} md={6} lg={4} className="mb-4">
-              <PostCard post={post} />
-            </Col>
-          ))}
-        </Row>
-
-        {posts.length === 0 && !loading && (
-          <div className="text-center text-white-50">
-            <h4>No posts here yet</h4>
-          </div>
-        )}
-      </Container>
+    <div className="space-y-4">
+      {posts.map((post) => (
+        <PostCard key={post.id} post={post} />
+      ))}
+      {posts.length === 0 && !loading && (
+        <div className="text-center text-white/70 py-10">No posts yet.</div>
+      )}
     </div>
   );
 }
