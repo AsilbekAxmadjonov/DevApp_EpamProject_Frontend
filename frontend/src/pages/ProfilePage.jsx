@@ -1,26 +1,24 @@
-import { useState, useEffect, useContext, useRef } from 'react';
-import { Container, Card, Row, Col, Button, Form } from 'react-bootstrap';
-import { PersonCircle } from 'react-bootstrap-icons';
-import { useFetch } from '../hooks/useFetch';
-import { ToastContainer, toast } from 'react-toastify';
-import Loader from '../components/Loader';
-import { AuthContext } from '../context/AuthContext';
+import { useState, useEffect, useContext, useRef } from "react";
+import { Container, Card, Row, Col, Button, Form } from "react-bootstrap";
+import { PersonCircle } from "react-bootstrap-icons";
+import { useFetch } from "../hooks/useFetch";
+import { ToastContainer, toast } from "react-toastify";
+import Loader from "../components/Loader";
+import { AuthContext } from "../context/AuthContext";
 
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [user, setUser] = useState({
-    firstName: '',
-    lastName: '',
-    username: '',
-    bio: '',
-    image: '', // this will store base64 or file URL
+    firstName: "",
+    lastName: "",
+    username: "",
+    bio: "",
+    image: "",
   });
-
   const { request, loading, error, clearError } = useFetch();
   const auth = useContext(AuthContext);
   const fileInputRef = useRef(null);
 
-  // Handle errors
   useEffect(() => {
     if (error) {
       toast.error(error);
@@ -28,15 +26,14 @@ export default function ProfilePage() {
     }
   }, [error, clearError]);
 
-  // Initialize user state from auth context
   useEffect(() => {
     if (auth) {
       setUser({
-        firstName: auth.firstName || '',
-        lastName: auth.lastName || '',
-        username: auth.username || '',
-        bio: auth.bio || '',
-        image: auth.image || '',
+        firstName: auth.firstName || "",
+        lastName: auth.lastName || "",
+        username: auth.username || "",
+        bio: auth.bio || "",
+        image: auth.image || "",
       });
     }
   }, [auth]);
@@ -49,12 +46,9 @@ export default function ProfilePage() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Convert image to base64 to preview and send to backend
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = () =>
       setUser((prev) => ({ ...prev, image: reader.result }));
-    };
     reader.readAsDataURL(file);
   };
 
@@ -68,16 +62,15 @@ export default function ProfilePage() {
         bio: user.bio,
         image: user.image,
       };
-
-      const data = await request(`/api/v1/user/${auth.userId}`, 'PUT', updatedUser, {
-        Authorization: `Bearer ${auth.token}`,
-      });
-
+      const data = await request(
+        `/api/v1/user/${auth.userId}`,
+        "PUT",
+        updatedUser,
+        { Authorization: `Bearer ${auth.token}` }
+      );
       setUser((prev) => ({ ...prev, ...data }));
       setIsEditing(false);
-      toast.success('Profile updated successfully!');
-
-      // Update auth context
+      toast.success("Profile updated successfully!");
       if (auth.login) {
         auth.login(
           auth.userId,
@@ -89,9 +82,8 @@ export default function ProfilePage() {
           data.image
         );
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update profile.');
+    } catch {
+      toast.error("Failed to update profile.");
     }
   };
 
@@ -99,45 +91,45 @@ export default function ProfilePage() {
 
   return (
     <Container className="py-4">
-      <Card>
+      <Card className="glass text-white">
         <Card.Body>
           <Row className="align-items-center">
             <Col md={2} className="text-center mb-3 mb-md-0">
               <div
-                style={{ cursor: isEditing ? 'pointer' : 'default' }}
+                style={{ cursor: isEditing ? "pointer" : "default" }}
                 onClick={() => isEditing && fileInputRef.current.click()}
               >
                 {user.image ? (
                   <img
                     src={user.image}
                     alt="Profile"
-                    className="rounded-circle"
-                    width={80}
-                    height={80}
+                    className="rounded-circle border border-white/30"
+                    width={90}
+                    height={90}
                   />
                 ) : (
-                  <PersonCircle size={80} className="text-primary" />
+                  <PersonCircle size={90} className="opacity-75" />
                 )}
               </div>
-              {/* Hidden file input */}
               {isEditing && (
                 <input
                   type="file"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  style={{ display: "none" }}
                   ref={fileInputRef}
                   onChange={handleImageChange}
                 />
               )}
             </Col>
+
             <Col md={8}>
               {!isEditing ? (
                 <div>
-                  <h4>{user.username}</h4>
-                  <p className="text-muted">
+                  <h4 className="mb-1">{user.username}</h4>
+                  <p className="opacity-75 mb-2">
                     {user.firstName} {user.lastName}
                   </p>
-                  {user.bio && <p>{user.bio}</p>}
+                  {user.bio && <p className="mb-0">{user.bio}</p>}
                 </div>
               ) : (
                 <Form onSubmit={handleSubmit}>
@@ -149,6 +141,7 @@ export default function ProfilePage() {
                       value={user.firstName}
                       onChange={handleInputChange}
                       required
+                      className="bg-transparent text-white"
                     />
                   </Form.Group>
                   <Form.Group className="mb-2">
@@ -159,6 +152,7 @@ export default function ProfilePage() {
                       value={user.lastName}
                       onChange={handleInputChange}
                       required
+                      className="bg-transparent text-white"
                     />
                   </Form.Group>
                   <Form.Group className="mb-2">
@@ -169,6 +163,7 @@ export default function ProfilePage() {
                       value={user.username}
                       onChange={handleInputChange}
                       required
+                      className="bg-transparent text-white"
                     />
                   </Form.Group>
                   <Form.Group className="mb-2">
@@ -178,24 +173,32 @@ export default function ProfilePage() {
                       name="bio"
                       value={user.bio}
                       onChange={handleInputChange}
-                      placeholder="Tell something about yourself"
                       rows={3}
+                      className="bg-transparent text-white"
                     />
                   </Form.Group>
                   <div className="d-flex gap-2 mt-2">
-                    <Button variant="outline-secondary" onClick={() => setIsEditing(false)}>
+                    <Button
+                      variant="outline-light"
+                      onClick={() => setIsEditing(false)}
+                    >
                       Cancel
                     </Button>
-                    <Button variant="primary" type="submit" disabled={loading}>
-                      {loading ? 'Saving...' : 'Save Changes'}
+                    <Button variant="light" type="submit" disabled={loading}>
+                      {loading ? "Saving…" : "Save Changes"}
                     </Button>
                   </div>
                 </Form>
               )}
             </Col>
+
             <Col md={2} className="text-end">
               {!isEditing && (
-                <Button variant="outline-primary" onClick={() => setIsEditing(true)}>
+                <Button
+                  variant="light"
+                  className="rounded-pill"
+                  onClick={() => setIsEditing(true)}
+                >
                   Edit Profile
                 </Button>
               )}

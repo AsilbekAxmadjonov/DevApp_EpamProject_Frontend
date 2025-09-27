@@ -14,6 +14,7 @@ export const useFetch = () => {
         if (authData.token && !headers.Authorization) {
           headers.Authorization = `Bearer ${authData.token}`;
         }
+        if (!headers.Accept) headers.Accept = "application/json";
 
         let payload = body;
         if (payload && !(payload instanceof FormData)) {

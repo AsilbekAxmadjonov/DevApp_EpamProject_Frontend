@@ -1,13 +1,13 @@
-import { useEffect, useState, useContext } from 'react';
-import { Container, Form, Button, Card } from 'react-bootstrap';
-import { ToastContainer, toast } from 'react-toastify';
-import { useFetch } from '../hooks/useFetch';
-import { useNavigate } from 'react-router';
-import { AuthContext } from '../context/AuthContext';
+import { useEffect, useState, useContext } from "react";
+import { Container, Form, Button, Card } from "react-bootstrap";
+import { ToastContainer, toast } from "react-toastify";
+import { useFetch } from "../hooks/useFetch";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ username: "", password: "" });
   const auth = useContext(AuthContext);
   const { request, loading, error, clearError } = useFetch();
 
@@ -19,8 +19,8 @@ export default function LoginPage() {
   }, [error, clearError]);
 
   const formValidation = () => {
-    if (form.username === '' || form.password === '') {
-      toast.warning('Пожалуйста, заполните все поля');
+    if (!form.username || !form.password) {
+      toast.warning("Please fill in all fields");
       return false;
     }
     return true;
@@ -31,86 +31,89 @@ export default function LoginPage() {
     if (!formValidation()) return;
 
     try {
-      const data = await request('/api/v1/auth/login', 'POST', {
-        username: form.username,
-        password: form.password,
-      });
+      const jsonPayload = { username: form.username, password: form.password };
+      const data = await request("/api/v1/auth/login", "POST", jsonPayload);
 
       if (data) {
-        console.log('Login data:', data);
-        // Pass all user info to auth context
-       const res =  auth.login(
+        auth.login(
           data.userId,
           data.token,
           data.username,
-          data.firstName || '',
-          data.lastName || ''
+          data.firstName || "",
+          data.lastName || ""
         );
-        console.log('Login response:', res);
-
-        toast.success('User logged in successfully');
-        navigate('/'); // redirect after login
+        toast.success("Logged in successfully");
+        navigate("/");
       }
     } catch (err) {
-      console.error('Login failed:', err);
-      toast.error('Login failed. Please check your credentials.');
+      toast.error("Login failed. Check your credentials.");
+      throw err;
     } finally {
-      setForm({ username: '', password: '' });
+      setForm({ username: "", password: "" });
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
   return (
-    <Container className="d-flex justify-content-center align-items-center min-vh-100">
-      <Card className="p-4" style={{ width: '400px' }}>
-        <Card.Body>
-          <h2 className="text-center mb-4">Welcome to DevLogs</h2>
-          <Form onSubmit={handleLogin}>
-            <Form.Group className="mb-3" controlId="username">
-              <Form.Label>Username</Form.Label>
-              <Form.Control
-                type="text"
-                name="username"
-                placeholder="Enter your username"
-                value={form.username}
-                onChange={handleInputChange}
-                required
-              />
-            </Form.Group>
+    <div className="min-vh-100 d-flex align-items-center justify-content-center p-3">
+      <Container className="d-flex align-items-center justify-content-center">
+        <Card className="glass p-4 text-white" style={{ width: 420 }}>
+          <Card.Body>
+            <h2 className="text-center mb-4 fw-bold">Welcome to DevLogs</h2>
+            <Form onSubmit={handleLogin}>
+              <Form.Group className="mb-3" controlId="username">
+                <Form.Label>Username</Form.Label>
+                <Form.Control
+                  type="text"
+                  name="username"
+                  placeholder="Enter your username"
+                  value={form.username}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, username: e.target.value }))
+                  }
+                  required
+                  className="bg-transparent text-white"
+                />
+              </Form.Group>
 
-            <Form.Group className="mb-3" controlId="password">
-              <Form.Label>Password</Form.Label>
-              <Form.Control
-                type="password"
-                name="password"
-                placeholder="Password"
-                value={form.password}
-                onChange={handleInputChange}
-                required
-              />
-            </Form.Group>
+              <Form.Group className="mb-3" controlId="password">
+                <Form.Label>Password</Form.Label>
+                <Form.Control
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, password: e.target.value }))
+                  }
+                  required
+                  className="bg-transparent text-white"
+                />
+              </Form.Group>
 
-            <Button type="submit" disabled={loading} variant="primary" className="w-100 mt-4">
-              Log In
-            </Button>
-          </Form>
-          <p className="mt-4">
-            Don't have an account?
-            <Button
-              disabled={loading}
-              variant="link"
-              onClick={() => navigate('/register')}
-            >
-              Register
-            </Button>
-          </p>
-        </Card.Body>
-      </Card>
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-100 mt-2 btn-gradient rounded-pill py-2"
+              >
+                {loading ? "Signing in…" : "Log In"}
+              </Button>
+            </Form>
+
+            <p className="mt-4 text-center">
+              Don't have an account?{" "}
+              <Button
+                disabled={loading}
+                variant="link"
+                className="text-white"
+                onClick={() => navigate("/register")}
+              >
+                Register
+              </Button>
+            </p>
+          </Card.Body>
+        </Card>
+      </Container>
       <ToastContainer />
-    </Container>
+    </div>
   );
 }

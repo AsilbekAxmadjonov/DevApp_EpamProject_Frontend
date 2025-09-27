@@ -19,6 +19,7 @@ export default function CreatePage() {
 
     try {
       setLoading(true);
+      // relative URL → Vite proxy handles CORS
       await axios.post(
         "/api/v1/posts",
         { userId, content },
@@ -38,30 +39,28 @@ export default function CreatePage() {
   };
 
   return (
-    <div className="flex justify-center items-start min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-10">
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-12 space-y-10 border border-gray-200">
-        {/* Header */}
-        <h1 className="text-4xl font-bold text-gray-900 text-center rounded-lg">
+    <div className="flex justify-center items-start min-h-screen p-10">
+      <div className="w-full max-w-2xl glass rounded-3xl p-12 space-y-8 text-white">
+        <h1 className="text-3xl md:text-4xl font-bold text-center">
           Create a New Post
         </h1>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="What's on your mind?"
             rows={8}
-            className="w-full border border-gray-300 rounded-2xl p-6 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 resize-none shadow-md hover:shadow-lg transition duration-200"
+            className="w-full rounded-2xl p-4 bg-transparent border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
 
           {status && (
             <p
               className={`text-sm font-medium text-center px-5 py-3 rounded-3xl border ${
                 status.type === "success"
-                  ? "bg-green-50 text-green-700 border-green-200"
-                  : "bg-red-50 text-red-700 border-red-200"
-              } shadow-sm`}
+                  ? "bg-green-600/20 text-green-100 border-green-300/30"
+                  : "bg-red-600/20 text-red-100 border-red-300/30"
+              }`}
             >
               {status.text}
             </p>
@@ -70,10 +69,8 @@ export default function CreatePage() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-1/2 mx-auto py-3 rounded-2xl font-semibold shadow-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed ${
-              loading
-                ? "bg-indigo-300 text-white"
-                : "bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 text-white"
+            className={`w-1/2 mx-auto py-3 rounded-2xl font-semibold btn-gradient ${
+              loading ? "opacity-70" : ""
             }`}
           >
             {loading ? "Posting..." : "Post"}

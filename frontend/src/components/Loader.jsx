@@ -1,9 +1,9 @@
-import { Spinner } from "react-bootstrap"
+import { Spinner } from "react-bootstrap";
 
 export default function Loader() {
   return (
-    <div style={{height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-      <Spinner animation="border" variant="primary" />
+    <div className="min-h-screen d-flex justify-content-center align-items-center">
+      <Spinner animation="border" variant="light" />
     </div>
-  )
+  );
 }
