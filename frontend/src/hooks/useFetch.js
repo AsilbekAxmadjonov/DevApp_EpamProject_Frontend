@@ -6,43 +6,59 @@ export const useFetch = () => {
 
   const request = useCallback(
     async (url, method = "GET", body = null, headers = {}) => {
+      setLoading(true);
       try {
-        setLoading(true);
-
-        // Auto add Authorization from localStorage (if present)
-        const authData = JSON.parse(localStorage.getItem("authData") || "{}");
-        if (authData.token && !headers.Authorization) {
-          headers.Authorization = `Bearer ${authData.token}`;
+        // Read token safely
+        let token = null;
+        try {
+          const raw = localStorage.getItem("authData");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            token = parsed?.token ?? null;
+          }
+        } catch {
+          /* ignore bad JSON */
         }
-        if (!headers.Accept) headers.Accept = "application/json";
 
+        // Build headers
+        const reqHeaders = { Accept: "application/json", ...headers };
+        if (token && !reqHeaders.Authorization) {
+          reqHeaders.Authorization = `Bearer ${token}`;
+        }
+
+        // Prepare body & content-type
         let payload = body;
-        if (payload && !(payload instanceof FormData)) {
+        if (
+          payload &&
+          !(payload instanceof FormData) &&
+          !(payload instanceof URLSearchParams)
+        ) {
+          if (!reqHeaders["Content-Type"])
+            reqHeaders["Content-Type"] = "application/json";
           payload = JSON.stringify(payload);
-          headers["Content-Type"] = "application/json";
         }
 
         const res = await fetch(url, {
           method,
+          headers: reqHeaders,
           body: payload,
-          headers,
-          // credentials: 'include' // enable if you switch to cookie auth
         });
 
+        const ct = res.headers.get("content-type") || "";
         let data = null;
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
+        if (ct.includes("application/json"))
           data = await res.json().catch(() => null);
-        } else if (res.status !== 204) {
-          data = await res.text().catch(() => null);
-        }
+        else if (res.status !== 204) data = await res.text().catch(() => null);
 
         if (!res.ok) {
           const message =
-            (data && data.message) ||
+            (data && (data.message || data.error || data.detail)) ||
             (typeof data === "string" && data) ||
             `Request failed with status ${res.status}`;
-          throw new Error(message);
+          const err = new Error(message);
+          err.status = res.status;
+          err.data = data;
+          throw err;
         }
 
         return data;
