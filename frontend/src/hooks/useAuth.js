@@ -8,12 +8,17 @@ export const useAuth = () => {
   const [lastName, setLastName] = useState(null);
   const [ready, setReady] = useState(false);
 
-  const login = useCallback((id, jwt, uname, fName = '', lName = '') => {
+  const login = useCallback((id, jwt, uname, fName = "", lName = "") => {
     localStorage.setItem(
-      'authData',
-      JSON.stringify({ userId: id, token: jwt, username: uname, firstName: fName, lastName: lName })
+      "authData",
+      JSON.stringify({
+        userId: id,
+        token: jwt,
+        username: uname,
+        firstName: fName,
+        lastName: lName,
+      })
     );
-
     setToken(jwt);
     setUserId(id);
     setUsername(uname);
@@ -27,13 +32,19 @@ export const useAuth = () => {
     setUsername(null);
     setFirstName(null);
     setLastName(null);
-    localStorage.removeItem('authData');
+    localStorage.removeItem("authData");
   }, []);
 
   useEffect(() => {
-    const authData = JSON.parse(localStorage.getItem('authData'));
+    const authData = JSON.parse(localStorage.getItem("authData"));
     if (authData && authData.token) {
-      login(authData.userId, authData.token, authData.username, authData.firstName, authData.lastName);
+      login(
+        authData.userId,
+        authData.token,
+        authData.username,
+        authData.firstName,
+        authData.lastName
+      );
     }
     setReady(true);
   }, [login]);

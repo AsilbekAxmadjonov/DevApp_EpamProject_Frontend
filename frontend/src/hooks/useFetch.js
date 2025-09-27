@@ -1,45 +1,42 @@
-import { header } from "framer-motion/client";
 import { useState, useCallback } from "react";
-
-// Set your backend base URL here
-const BASE_URL = "http://localhost:8080";
 
 export const useFetch = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const {token} = localStorage.getItem("AuthData");
 
   const request = useCallback(
     async (url, method = "GET", body = null, headers = {}) => {
       try {
         setLoading(true);
- 
 
-        // If body is provided and not FormData, convert to JSON
-        if (body && !(body instanceof FormData)) {
-          body = JSON.stringify(body);
-          headers["Content-Type"] = "application/json";
-          headers["Authorization"] = `Bearer ${token}`;
-
+        // Auto add Authorization from localStorage (if present)
+        const authData = JSON.parse(localStorage.getItem("authData") || "{}");
+        if (authData.token && !headers.Authorization) {
+          headers.Authorization = `Bearer ${authData.token}`;
         }
 
-        const res = await fetch(`${BASE_URL}${url}`, {
+        let payload = body;
+        if (payload && !(payload instanceof FormData)) {
+          payload = JSON.stringify(payload);
+          headers["Content-Type"] = "application/json";
+        }
+
+        const res = await fetch(url, {
           method,
-          body,
+          body: payload,
           headers,
+          // credentials: 'include' // enable if you switch to cookie auth
         });
 
-        // Parse response based on content type
         let data = null;
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
           data = await res.json().catch(() => null);
-        } else {
+        } else if (res.status !== 204) {
           data = await res.text().catch(() => null);
         }
 
         if (!res.ok) {
-          // Extract message from JSON or fallback to status
           const message =
             (data && data.message) ||
             (typeof data === "string" && data) ||
@@ -47,12 +44,10 @@ export const useFetch = () => {
           throw new Error(message);
         }
 
-        console.log("Received response:", data);
         return data;
       } catch (err) {
         setError(err.message || "Unexpected error");
-        console.error("Error when request:", err);
-        throw err; // allow caller to catch it
+        throw err;
       } finally {
         setLoading(false);
       }

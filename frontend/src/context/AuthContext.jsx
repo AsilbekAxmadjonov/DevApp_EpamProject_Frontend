@@ -10,25 +10,26 @@ export const AuthContext = createContext({
   login: () => {},
   logout: () => {},
   isAuthenticated: false,
-  ready: false
+  ready: false,
 });
 
 export default function AuthContextProvider({ children }) {
-  const { token, userId, username, firstName, lastName, login, logout, ready } = useAuth();
+  const { token, userId, username, firstName, lastName, login, logout, ready } =
+    useAuth();
   const isAuthenticated = !!token;
 
   return (
     <AuthContext.Provider
       value={{
         token,
-        userId,       // fixed: send userId, not undefined "id"
+        userId,
         username,
         firstName,
         lastName,
         login,
         logout,
         isAuthenticated,
-        ready
+        ready,
       }}
     >
       {children}
