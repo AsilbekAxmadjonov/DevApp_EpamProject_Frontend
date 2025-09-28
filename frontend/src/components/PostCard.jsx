@@ -257,14 +257,6 @@ export default function PostCard({ post }) {
   // ----- render -----
   return (
     <Card className="border-0 text-white max-w-[600px] w-full mx-auto rounded-2xl bg-white/10 backdrop-blur-xl shadow-lg ring-1 ring-white/10">
-      {/* {post.image && (
-        <Card.Img
-          style={{ width: "100%", objectFit: "cover", maxHeight: "320px" }}
-          variant="top"
-          src={`data:image/jpg;base64,${post.image}`}
-          className="rounded-t-2xl"
-        />
-      )} */}
 
       <Card.Body className="p-5">
         <div className="flex justify-between items-start mb-3">
@@ -363,7 +355,7 @@ export default function PostCard({ post }) {
                 return (
                   <div
                     key={c.id}
-                    className="p-3 rounded-xl bg-white/5 ring-1 ring-white/10"
+                    className="p-3 rounded-xl bg-white/10 ring-1 ring-white/10"
                   >
                     <div className="flex items-start gap-2 mb-1">
                       {c.author?.profilePhoto ? (
