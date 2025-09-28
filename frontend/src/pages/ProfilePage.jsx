@@ -102,7 +102,7 @@ export default function ProfilePage() {
   return (
     <Container className="py-6">
       {/* Header */}
-      <div className="text-white rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
+      <div className="text-gray-700 rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
         <div className="flex items-center gap-8">
           <div className="relative">
             {avatarSrc ? (
@@ -141,7 +141,7 @@ export default function ProfilePage() {
               <div className="font-semibold">
                 {`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()}
               </div>
-              {user?.bio && <div className="text-white/80">{user.bio}</div>}
+              {user?.bio && <div className="text-gray-700">{user.bio}</div>}
             </div>
           </div>
         </div>
@@ -156,7 +156,7 @@ export default function ProfilePage() {
           />
         ))}
         {posts.length === 0 && (
-          <div className="text-center text-white/70 py-10">No posts yet.</div>
+          <div className="text-center text-gray-700/70 py-10">No posts yet.</div>
         )}
       </div>
 
@@ -166,7 +166,7 @@ export default function ProfilePage() {
         onHide={() => setEditOpen(false)}
         centered
         dialogClassName="max-w-xl"
-        contentClassName="bg-white/10 backdrop-blur-xl text-white rounded-2xl border border-white/15 shadow-xl"
+        contentClassName="bg-white/10 backdrop-blur-xl text-black rounded-2xl border border-white/15 shadow-xl"
         backdropClassName="!bg-black/50 !backdrop-blur-sm"
       >
         <Modal.Header
@@ -191,7 +191,7 @@ export default function ProfilePage() {
                 <div className="w-20 h-20 rounded-full bg-white/20" />
               )}
               <label
-                className="absolute -bottom-2 -right-2 cursor-pointer bg-white/20 hover:bg-white/30 text-white p-2 rounded-full ring-1 ring-white/20"
+                className="absolute -bottom-2 -right-2 cursor-pointer bg-white/20 hover:bg-white/30 text-gray-700 p-2 rounded-full ring-1 ring-white/20"
                 title="Change photo"
               >
                 <Camera size={16} />
@@ -208,31 +208,31 @@ export default function ProfilePage() {
 
           <Form>
             <Form.Group className="mb-3">
-              <Form.Label className="text-white/80">First name</Form.Label>
+              <Form.Label className="text-gray-700">First name</Form.Label>
               <Form.Control
                 value={form.firstName}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, firstName: e.target.value }))
                 }
-                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
+                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
                 placeholder="First name"
               />
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label className="text-white/80">Last name</Form.Label>
+              <Form.Label className="text-gray-700">Last name</Form.Label>
               <Form.Control
                 value={form.lastName}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, lastName: e.target.value }))
                 }
-                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
+                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
                 placeholder="Last name"
               />
             </Form.Group>
 
             <Form.Group>
-              <Form.Label className="text-white/80">Bio</Form.Label>
+              <Form.Label className="text-gray-700">Bio</Form.Label>
               <Form.Control
                 as="textarea"
                 rows={3}
@@ -240,7 +240,7 @@ export default function ProfilePage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, bio: e.target.value }))
                 }
-                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
+                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
                 placeholder="A few words about you"
               />
             </Form.Group>
