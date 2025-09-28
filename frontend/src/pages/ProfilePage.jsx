@@ -1,270 +1,464 @@
+import {
+  Card,
+  Button,
+  Form,
+  Collapse,
+  Image,
+  Dropdown,
+  Modal,
+} from "react-bootstrap";
+import {
+  Heart,
+  HeartFill,
+  Chat,
+  PersonCircle,
+  VolumeUp,
+  VolumeMute,
+  ThreeDots,
+} from "react-bootstrap-icons";
 import { useState, useEffect, useContext } from "react";
-import { Container, Button, Modal, Form } from "react-bootstrap";
-import { PersonCircle, Camera } from "react-bootstrap-icons";
 import { useFetch } from "../hooks/useFetch";
-import { ToastContainer, toast } from "react-toastify";
-import Loader from "../components/Loader";
 import { AuthContext } from "../context/AuthContext";
-import PostCard from "../components/PostCard";
+import { toast } from "react-toastify";
 
-export default function ProfilePage() {
-  const [user, setUser] = useState(null);
-  const [posts, setPosts] = useState([]);
-  const [editOpen, setEditOpen] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", bio: "" });
-  const [photoB64, setPhotoB64] = useState("");
-  const [previewSrc, setPreviewSrc] = useState("");
+/* robust date parser for ISO or "YYYY-MM-DD HH:mm:ss" */
+function fmtDate(v) {
+  if (!v) return "";
+  const s = typeof v === "string" ? v.replace(" ", "T") : v;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+}
 
-  const { request, loading, error, clearError } = useFetch();
-  const auth = useContext(AuthContext);
+export default function PostCard({ post }) {
+  const [comments, setComments] = useState([]);
+  const [likesCount, setLikesCount] = useState(Number(post.likes) || 0);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
 
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-      clearError();
-    }
-  }, [error, clearError]);
+  const [showComments, setShowComments] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voices, setVoices] = useState([]);
+  const [editPostOpen, setEditPostOpen] = useState(false);
+  const [editPostText, setEditPostText] = useState(post.content || "");
 
-  const pickImage = (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result;
-      const base64 = String(dataUrl).split(",")[1] || "";
-      setPhotoB64(base64);
-      setPreviewSrc(dataUrl);
-    };
-    reader.readAsDataURL(f);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+
+  const { request } = useFetch();
+  const { userId, username } = useContext(AuthContext);
+
+  const isMyPost =
+    Number(post.userId) === Number(userId) || post.username === username;
+
+  const parseCount = (v) => {
+    if (Number.isFinite(v)) return v;
+    if (typeof v === "string" && !Number.isNaN(+v)) return +v;
+    if (v && Number.isFinite(v.count)) return v.count;
+    if (v && Number.isFinite(v.total)) return v.total;
+    return 0;
   };
 
-  async function load() {
-    if (!auth?.userId) return;
-    try {
-      const u = await request(`/api/v1/user/${auth.userId}`, "GET");
-      setUser(u || null);
-      setForm({
-        firstName: u?.firstName ?? "",
-        lastName: u?.lastName ?? "",
-        bio: u?.bio ?? "",
-      });
-      setPreviewSrc(
-        u?.profilePhoto
-          ? `data:image/jpg;base64,${u.profilePhoto}`
-          : u?.image || ""
-      );
+  // voices
+  useEffect(() => {
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => (window.speechSynthesis.onvoiceschanged = null);
+  }, []);
 
-      const myPosts = await request(
-        `/api/v1/posts/getAllPostsByUserId?id=${auth.userId}`,
-        "GET"
-      );
-      setPosts(Array.isArray(myPosts) ? myPosts : myPosts?.data ?? []);
-    } catch {
-      // ignore
+  // load comments once per post (no flicker)
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const data =
+          (await request(
+            `/api/v1/comments/posts/${post.id}/getCommentsByPost`,
+            "GET"
+          )) || [];
+        if (!ignore) setComments(data);
+      } catch {
+        toast.error("Failed to load comments");
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [post.id, request]);
+
+  // likes count (support either likesCount or unlikesCount route)
+  async function refreshLikesCount() {
+    try {
+      try {
+        const res = await request(
+          `/api/v1/likes/post/${post.id}/likesCount`,
+          "GET"
+        );
+        setLikesCount(parseCount(res));
+      } catch {
+        const res = await request(
+          `/api/v1/likes/post/${post.id}/unlikesCount`,
+          "GET"
+        );
+        setLikesCount(parseCount(res));
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
-
   useEffect(() => {
-    load();
+    refreshLikesCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth?.userId]);
+  }, [post.id]);
 
-  const saveProfile = async () => {
+  // like / unlike
+  const handleLike = async () => {
+    if (likeBusy) return;
+    if (!userId) return toast.error("Please log in again.");
+
+    setLikeBusy(true);
+    const prevLiked = isLiked;
+    const prevCount = likesCount;
+
+    // optimistic UI
+    setIsLiked(!prevLiked);
+    setLikesCount((c) => Math.max(0, c + (prevLiked ? -1 : +1)));
+
     try {
-      const payload = {
-        id: auth.userId,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        username: user?.username,
-        email: user?.email,
-        phone: user?.phone,
-        bio: form.bio,
-      };
-      if (photoB64) payload.profilePhoto = photoB64;
-
-      await request(`/api/v1/user/${auth.userId}`, "PUT", payload);
-      toast.success("Profile updated");
-      setEditOpen(false);
-      load();
-    } catch {
-      toast.error("Failed to update profile");
+      if (!prevLiked) {
+        await request(`/api/v1/likes/like`, "POST", {
+          userId,
+          postId: post.id,
+        });
+      } else {
+        await request(`/api/v1/likes/unlike`, "POST", {
+          userId,
+          postId: post.id,
+        });
+      }
+      await refreshLikesCount();
+    } catch (err) {
+      console.error(err);
+      setIsLiked(prevLiked);
+      setLikesCount(prevCount);
+      toast.error("Failed to update like status");
+    } finally {
+      setLikeBusy(false);
     }
   };
 
-  if (loading && !user) return <Loader />;
+  // add comment (append locally; keep panel open)
+  const handleCommentSubmit = async (id) => {
+    if (!newComment.trim()) return;
+    try {
+      const created = await request(
+        `/api/v1/comments/posts/${id}/create`,
+        "POST",
+        { content: newComment }
+      );
+      setComments((prev) => [...prev, created]);
+      setNewComment("");
+    } catch {
+      toast.error("Failed to post comment");
+    }
+  };
 
-  const avatarSrc =
-    previewSrc ||
-    (user?.profilePhoto
-      ? `data:image/jpg;base64,${user.profilePhoto}`
-      : user?.image || "");
+  // TTS
+  const handleReadAloud = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    const speech = new SpeechSynthesisUtterance(
+      `${post.title ?? ""}. ${post.content ?? ""}`
+    );
+    const voice = voices.find((v) => v.lang && v.lang.startsWith("en"));
+    if (voice) speech.voice = voice;
+    speech.onend = () => setIsSpeaking(false);
+    speech.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(speech);
+    setIsSpeaking(true);
+  };
+
+  const openEditPost = () => {
+    setEditPostText(post.content || "");
+    setEditPostOpen(true);
+  };
+  const saveEditPost = async () => {
+    try {
+      const updated = await request(`/api/v1/posts/${post.id}`, "PUT", {
+        userId,
+        content: editPostText,
+      });
+      post.content = updated?.content ?? editPostText;
+      setEditPostOpen(false);
+      toast.success("Post updated");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update post");
+    }
+  };
+
+  const startEditComment = (c) => {
+    setEditingCommentId(c.id);
+    setEditingText(c.content);
+  };
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingText("");
+  };
+  const saveEditComment = async (c) => {
+    try {
+      const upd = await request(`/api/v1/comments/${c.id}/update`, "PUT", {
+        content: editingText,
+      });
+      setComments((prev) =>
+        prev.map((x) =>
+          x.id === c.id ? { ...x, content: upd?.content ?? editingText } : x
+        )
+      );
+      cancelEditComment();
+      toast.success("Comment updated");
+    } catch {
+      toast.error("Failed to update comment");
+    }
+  };
+  const removeComment = async (c) => {
+    try {
+      await request(`/api/v1/comments/${c.id}/delete`, "DELETE");
+    } catch (err) {
+      console.log(err);
+    }
+    setComments((prev) => prev.filter((x) => x.id !== c.id));
+  };
 
   return (
-    <Container className="py-6">
-      {/* Header */}
-      <div className="text-white rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
-        <div className="flex items-center gap-8">
-          <div className="relative">
-            {avatarSrc ? (
-              <img
-                src={avatarSrc}
-                alt="Profile"
-                className="rounded-full w-28 h-28 object-cover ring-1 ring-white/20"
-              />
-            ) : (
-              <PersonCircle size={110} className="opacity-75" />
+    <Card className="shadow-lg border-0 glass text-white max-w-[500px] w-full mx-auto">
+      {post.image && (
+        <Card.Img
+          style={{ width: "100%", objectFit: "cover", maxHeight: "320px" }}
+          variant="top"
+          src={`data:image/jpg;base64,${post.image}`}
+        />
+      )}
+
+      <Card.Body>
+        <div className="d-flex justify-content-between align-items-start mb-2">
+          <div className="min-w-0">
+            <Card.Title className="mb-1">{post.title}</Card.Title>
+            <div className="d-flex align-items-center gap-2 border-bottom border-white/25 pb-1">
+              {/* show ONLY the author's username */}
+              <h6 className="mb-0 truncate">{post.username}</h6>
+            </div>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <small className="opacity-75">{fmtDate(post.createdAt)}</small>
+            {isMyPost && (
+              <Dropdown align="end">
+                <Dropdown.Toggle variant="link" className="text-white p-0">
+                  <ThreeDots />
+                </Dropdown.Toggle>
+                <Dropdown.Menu className="px-2">
+                  <Dropdown.Item onClick={openEditPost}>
+                    Edit Post
+                  </Dropdown.Item>
+                  <Dropdown.Item className="text-danger" disabled>
+                    Delete Post (soon)
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
             )}
           </div>
-
-          <div className="flex-1">
-            <div className="flex items-center gap-4">
-              <h2 className="m-0 text-2xl font-semibold">
-                {user?.username ?? auth.username}
-              </h2>
-              <Button
-                variant="outline-light"
-                size="sm"
-                className="rounded-full"
-                onClick={() => setEditOpen(true)}
-              >
-                Edit profile
-              </Button>
-            </div>
-
-            <div className="flex gap-8 mt-3">
-              <div>
-                <span className="font-bold">{posts.length}</span> posts
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="font-semibold">
-                {`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()}
-              </div>
-              {user?.bio && <div className="text-white">{user.bio}</div>}
-            </div>
-          </div>
         </div>
-      </div>
 
-      {/* All user's posts (PostCard includes edit menu for your own posts) */}
-      <div className="space-y-4">
-        {posts.map((p) => (
-          <PostCard
-            key={p.id}
-            post={{ ...p, username: user?.username || p.username }}
-          />
-        ))}
-        {posts.length === 0 && (
-          <div className="text-center text-white/70 py-10">No posts yet.</div>
-        )}
-      </div>
+        <Card.Text className="mb-3 opacity-95 whitespace-pre-wrap">
+          {post.content}
+        </Card.Text>
 
-      {/* Edit profile modal — MATCHED GLASS STYLE */}
-      <Modal
-        show={editOpen}
-        onHide={() => setEditOpen(false)}
-        centered
-        dialogClassName="max-w-xl"
-        contentClassName="bg-white/10 backdrop-blur-xl text-black rounded-2xl border border-white/15 shadow-xl"
-        backdropClassName="!bg-black/50 !backdrop-blur-sm"
-      >
-        <Modal.Header
-          closeButton
-          closeVariant="white"
-          className="border-white/10 rounded-t-2xl"
-        >
-          <Modal.Title>Edit Profile</Modal.Title>
-        </Modal.Header>
-
-        <Modal.Body>
-          {/* avatar + camera */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="relative">
-              {avatarSrc ? (
-                <img
-                  src={avatarSrc}
-                  alt="preview"
-                  className="rounded-full w-20 h-20 object-cover ring-1 ring-white/20"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-white/20" />
-              )}
-              <label
-                className="absolute -bottom-2 -right-2 cursor-pointer bg-white/20 hover:bg-white/30 text-gray-700 p-2 rounded-full ring-1 ring-white/20"
-                title="Change photo"
-              >
-                <Camera size={16} />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={pickImage}
-                  hidden
-                />
-              </label>
-            </div>
-            <div className="opacity-80">Profile photo</div>
-          </div>
-
-          <Form>
-            <Form.Group className="mb-3">
-              <Form.Label className="text-gray-700">First name</Form.Label>
-              <Form.Control
-                value={form.firstName}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, firstName: e.target.value }))
-                }
-                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
-                placeholder="First name"
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="text-gray-700">Last name</Form.Label>
-              <Form.Control
-                value={form.lastName}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, lastName: e.target.value }))
-                }
-                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
-                placeholder="Last name"
-              />
-            </Form.Group>
-
-            <Form.Group>
-              <Form.Label className="text-gray-700">Bio</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={form.bio}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, bio: e.target.value }))
-                }
-                className="bg-white/10 text-gray-700 border border-white/30 rounded-xl focus:ring-0 focus:border-white/50 placeholder-white/50"
-                placeholder="A few words about you"
-              />
-            </Form.Group>
-          </Form>
-        </Modal.Body>
-
-        <Modal.Footer className="border-white/10">
+        <div className="d-flex gap-2 mb-2">
           <Button
-            variant="outline-light"
-            className="rounded-full"
-            onClick={() => setEditOpen(false)}
+            variant={isLiked ? "light" : "outline-light"}
+            size="sm"
+            onClick={handleLike}
+            disabled={likeBusy}
+            aria-pressed={isLiked}
+            className="d-flex align-items-center gap-1 rounded-pill"
+          >
+            {isLiked ? <HeartFill /> : <Heart />}
+            <span>{likesCount}</span>
+          </Button>
+
+          <Button
+            variant={showComments ? "light" : "outline-light"}
+            size="sm"
+            onClick={() => setShowComments((v) => !v)}
+            className="d-flex align-items-center gap-1 rounded-pill"
+          >
+            <Chat />
+            <span>{comments.length}</span>
+          </Button>
+
+          <Button
+            variant={isSpeaking ? "light" : "outline-light"}
+            size="sm"
+            onClick={handleReadAloud}
+            className="d-flex align-items-center rounded-pill"
+          >
+            {isSpeaking ? <VolumeMute /> : <VolumeUp />}
+          </Button>
+        </div>
+
+        {/* Keep content mounted; avoid flicker */}
+        <Collapse in={showComments} mountOnEnter>
+          <div className="mt-3">
+            <div className="mb-3 d-flex flex-column gap-2">
+              {comments.map((c) => {
+                const mine = Number(c.userId) === Number(userId);
+                return (
+                  <div key={c.id} className="p-3 rounded-3 glass">
+                    <div className="d-flex align-items-start gap-2 mb-1">
+                      {c.author?.profilePhoto ? (
+                        <Image
+                          src={`data:image/jpg;base64,${c.author.profilePhoto}`}
+                          roundedCircle
+                          width={30}
+                          height={30}
+                        />
+                      ) : (
+                        <PersonCircle size={30} className="opacity-75" />
+                      )}
+                      <div className="flex-grow-1">
+                        <div className="d-flex align-items-center">
+                          <strong>
+                            {c.author
+                              ? `${c.author.firstName ?? ""} ${
+                                  c.author.lastName ?? ""
+                                }`.trim() || c.author.username
+                              : "Unknown"}
+                          </strong>
+                          <small className="opacity-75 ms-2">
+                            {fmtDate(c.createdAt)}
+                          </small>
+                        </div>
+
+                        {editingCommentId === c.id ? (
+                          <div className="mt-2">
+                            <Form.Control
+                              as="textarea"
+                              rows={2}
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              className="bg-transparent text-white"
+                            />
+                            <div className="d-flex gap-2 mt-2">
+                              <Button
+                                size="sm"
+                                variant="light"
+                                onClick={() => saveEditComment(c)}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-light"
+                                onClick={cancelEditComment}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mb-0 whitespace-pre-wrap">
+                            {c.content}
+                          </p>
+                        )}
+                      </div>
+
+                      {mine && editingCommentId !== c.id && (
+                        <Dropdown align="end">
+                          <Dropdown.Toggle
+                            variant="link"
+                            className="text-white p-0"
+                          >
+                            <ThreeDots />
+                          </Dropdown.Toggle>
+                          <Dropdown.Menu className="px-2">
+                            <Dropdown.Item onClick={() => startEditComment(c)}>
+                              Edit
+                            </Dropdown.Item>
+                            <Dropdown.Item
+                              className="text-danger"
+                              onClick={() => removeComment(c)}
+                            >
+                              Delete
+                            </Dropdown.Item>
+                          </Dropdown.Menu>
+                        </Dropdown>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCommentSubmit(post.id);
+              }}
+            >
+              <Form.Group className="mb-2">
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  placeholder="Write a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="rounded-3 bg-transparent text-white"
+                />
+              </Form.Group>
+              <Button
+                type="submit"
+                size="sm"
+                className="rounded-pill btn-gradient"
+              >
+                Post Comment
+              </Button>
+            </Form>
+          </div>
+        </Collapse>
+      </Card.Body>
+
+      <Modal show={editPostOpen} onHide={() => setEditPostOpen(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Post</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Content</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={6}
+              value={editPostText}
+              onChange={(e) => setEditPostText(e.target.value)}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setEditPostOpen(false)}
           >
             Cancel
           </Button>
-          <Button
-            className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-900 border-0"
-            onClick={saveProfile}
-          >
+          <Button variant="primary" onClick={saveEditPost}>
             Save
           </Button>
         </Modal.Footer>
       </Modal>
-
-      <ToastContainer />
-    </Container>
+    </Card>
   );
 }
