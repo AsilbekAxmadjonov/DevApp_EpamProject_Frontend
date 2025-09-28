@@ -1,31 +1,26 @@
 import { useState, useEffect, useContext } from "react";
-import {
-  Container,
-  Card,
-  Row,
-  Col,
-  Button,
-  Modal,
-  Form,
-} from "react-bootstrap";
-import { PersonCircle } from "react-bootstrap-icons";
+import { Container, Button, Modal, Form } from "react-bootstrap";
+import { PersonCircle, Camera } from "react-bootstrap-icons";
 import { useFetch } from "../hooks/useFetch";
 import { ToastContainer, toast } from "react-toastify";
 import Loader from "../components/Loader";
 import { AuthContext } from "../context/AuthContext";
+import PostCard from "../components/PostCard";
 
-function fmtDate(v) {
-  if (!v) return "";
-  const s = typeof v === "string" ? v.replace(" ", "T") : v;
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString();
-}
+// function fmtDate(v) {
+//   if (!v) return "";
+//   const s = typeof v === "string" ? v.replace(" ", "T") : v;
+//   const d = new Date(s);
+//   return isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+// }
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", bio: "" });
+  const [photoB64, setPhotoB64] = useState("");
+  const [previewSrc, setPreviewSrc] = useState("");
 
   const { request, loading, error, clearError } = useFetch();
   const auth = useContext(AuthContext);
@@ -37,6 +32,19 @@ export default function ProfilePage() {
     }
   }, [error, clearError]);
 
+  const pickImage = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result;
+      const base64 = String(dataUrl).split(",")[1] || "";
+      setPhotoB64(base64);
+      setPreviewSrc(dataUrl);
+    };
+    reader.readAsDataURL(f);
+  };
+
   async function load() {
     if (!auth?.userId) return;
     try {
@@ -47,14 +55,19 @@ export default function ProfilePage() {
         lastName: u?.lastName ?? "",
         bio: u?.bio ?? "",
       });
+      setPreviewSrc(
+        u?.profilePhoto
+          ? `data:image/jpg;base64,${u.profilePhoto}`
+          : u?.image || ""
+      );
 
       const myPosts = await request(
         `/api/v1/posts/getAllPostsByUserId?id=${auth.userId}`,
         "GET"
       );
-      setPosts(Array.isArray(myPosts) ? myPosts : []);
+      setPosts(Array.isArray(myPosts) ? myPosts : myPosts?.data ?? []);
     } catch {
-      console.log();
+      console.log("Failed to load profile data");
     }
   }
 
@@ -65,17 +78,18 @@ export default function ProfilePage() {
 
   const saveProfile = async () => {
     try {
-      // Swagger shows PUT /api/v1/user/{id} with many fields;
-      // send the ones we have + keep current values for required ones.
-      await request(`/api/v1/user/${auth.userId}`, "PUT", {
+      const payload = {
         id: auth.userId,
         firstName: form.firstName,
         lastName: form.lastName,
-        username: user?.username, // keep current if required
+        username: user?.username,
         email: user?.email,
         phone: user?.phone,
         bio: form.bio,
-      });
+      };
+      if (photoB64) payload.profilePhoto = photoB64;
+
+      await request(`/api/v1/user/${auth.userId}`, "PUT", payload);
       toast.success("Profile updated");
       setEditOpen(false);
       load();
@@ -86,16 +100,23 @@ export default function ProfilePage() {
 
   if (loading && !user) return <Loader />;
 
+  const avatarSrc =
+    previewSrc ||
+    (user?.profilePhoto
+      ? `data:image/jpg;base64,${user.profilePhoto}`
+      : user?.image || "");
+
   return (
-    <Container className="py-4">
-      <div className="glass text-white rounded-3xl p-5 mb-4">
+    <Container className="py-6">
+      {/* Header */}
+      <div className="text-white rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
         <div className="flex items-center gap-8">
-          <div>
-            {user?.image ? (
+          <div className="relative">
+            {avatarSrc ? (
               <img
-                src={user.image}
+                src={avatarSrc}
                 alt="Profile"
-                className="rounded-full w-28 h-28 border border-white/30"
+                className="rounded-full w-28 h-28 object-cover ring-1 ring-white/20"
               />
             ) : (
               <PersonCircle size={110} className="opacity-75" />
@@ -104,10 +125,13 @@ export default function ProfilePage() {
 
           <div className="flex-1">
             <div className="flex items-center gap-4">
-              <h2 className="m-0">{user?.username ?? auth.username}</h2>
+              <h2 className="m-0 text-2xl font-semibold">
+                {user?.username ?? auth.username}
+              </h2>
               <Button
                 variant="outline-light"
                 size="sm"
+                className="rounded-full"
                 onClick={() => setEditOpen(true)}
               >
                 Edit profile
@@ -130,61 +154,80 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <Row className="g-4">
+      {/* All user's posts with edit (via PostCard) */}
+      <div className="space-y-4">
         {posts.map((p) => (
-          <Col key={p.id} xs={12} sm={6} md={4}>
-            <Card className="glass h-100 text-white">
-              {p.image && (
-                <Card.Img
-                  style={{ width: "100%", objectFit: "cover", height: 220 }}
-                  variant="top"
-                  src={`data:image/jpg;base64,${p.image}`}
-                />
-              )}
-              <Card.Body>
-                <div className="text-sm opacity-70 mb-1">
-                  {fmtDate(p.createdAt) || "-"}
-                </div>
-                <div className="fw-semibold mb-1 truncate">
-                  {p.title || "Post"}
-                </div>
-                <div className="opacity-90 line-clamp-3">{p.content}</div>
-              </Card.Body>
-            </Card>
-          </Col>
+          <PostCard
+            key={p.id}
+            post={{ ...p, username: user?.username || p.username }}
+          />
         ))}
         {posts.length === 0 && (
           <div className="text-center text-white/70 py-10">No posts yet.</div>
         )}
-      </Row>
+      </div>
 
-      {/* Edit profile modal */}
-      <Modal show={editOpen} onHide={() => setEditOpen(false)} centered>
-        <Modal.Header closeButton>
+      {/* Edit profile modal — Tailwind glass */}
+      <Modal
+        show={editOpen}
+        onHide={() => setEditOpen(false)}
+        centered
+        contentClassName="bg-white/10 backdrop-blur-xl text-white rounded-2xl border border-white/15"
+      >
+        <Modal.Header closeButton className="border-white/10 rounded-t-2xl">
           <Modal.Title>Edit Profile</Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative">
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="preview"
+                  className="rounded-full w-20 h-20 object-cover ring-1 ring-white/20"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-white/20" />
+              )}
+              <label
+                className="absolute -bottom-2 -right-2 cursor-pointer bg-white/20 hover:bg-white/30 text-white p-2 rounded-full ring-1 ring-white/20"
+                title="Change photo"
+              >
+                <Camera size={16} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={pickImage}
+                  hidden
+                />
+              </label>
+            </div>
+            <div className="opacity-80">Profile photo</div>
+          </div>
+
           <Form>
             <Form.Group className="mb-3">
-              <Form.Label>First name</Form.Label>
+              <Form.Label className="text-white/80">First name</Form.Label>
               <Form.Control
                 value={form.firstName}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, firstName: e.target.value }))
                 }
+                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50"
               />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Last name</Form.Label>
+              <Form.Label className="text-white/80">Last name</Form.Label>
               <Form.Control
                 value={form.lastName}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, lastName: e.target.value }))
                 }
+                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50"
               />
             </Form.Group>
             <Form.Group>
-              <Form.Label>Bio</Form.Label>
+              <Form.Label className="text-white/80">Bio</Form.Label>
               <Form.Control
                 as="textarea"
                 rows={3}
@@ -192,18 +235,23 @@ export default function ProfilePage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, bio: e.target.value }))
                 }
+                className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50"
               />
             </Form.Group>
           </Form>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer className="border-white/10">
           <Button
-            variant="outline-secondary"
+            variant="outline-light"
+            className="rounded-full"
             onClick={() => setEditOpen(false)}
           >
             Cancel
           </Button>
-          <Button variant="primary" onClick={saveProfile}>
+          <Button
+            className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-900 border-0"
+            onClick={saveProfile}
+          >
             Save
           </Button>
         </Modal.Footer>
