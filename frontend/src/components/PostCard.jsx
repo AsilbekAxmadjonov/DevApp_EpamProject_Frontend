@@ -21,6 +21,14 @@ import { useFetch } from "../hooks/useFetch";
 import { AuthContext } from "../context/AuthContext";
 import { toast } from "react-toastify";
 
+/* robust date parser for ISO or "YYYY-MM-DD HH:mm:ss" */
+function fmtDate(v) {
+  if (!v) return "";
+  const s = typeof v === "string" ? v.replace(" ", "T") : v;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+}
+
 export default function PostCard({ post }) {
   const [comments, setComments] = useState([]);
   const [likesCount, setLikesCount] = useState(Number(post.likes) || 0);
@@ -38,12 +46,11 @@ export default function PostCard({ post }) {
   const [editingText, setEditingText] = useState("");
 
   const { request } = useFetch();
-  const { userId, firstName, lastName, username } = useContext(AuthContext);
+  const { userId, username } = useContext(AuthContext);
 
   const isMyPost =
     Number(post.userId) === Number(userId) || post.username === username;
 
-  // --- helpers ---
   const parseCount = (v) => {
     if (Number.isFinite(v)) return v;
     if (typeof v === "string" && !Number.isNaN(+v)) return +v;
@@ -60,58 +67,57 @@ export default function PostCard({ post }) {
     return () => (window.speechSynthesis.onvoiceschanged = null);
   }, []);
 
-  // comments
+  // load comments once per post (no flicker)
   useEffect(() => {
+    let ignore = false;
     (async () => {
       try {
-        const commentsData = await request(
-          `/api/v1/comments/posts/${post.id}/getCommentsByPost`,
-          "GET"
-        );
-        const withAuthors = await Promise.all(
-          (commentsData || []).map(async (comment) => {
-            try {
-              const author = await request(
-                `/api/v1/user/${comment.userId}`,
-                "GET"
-              );
-              return { ...comment, author };
-            } catch {
-              return { ...comment, author: null };
-            }
-          })
-        );
-        setComments(withAuthors);
+        const data =
+          (await request(
+            `/api/v1/comments/posts/${post.id}/getCommentsByPost`,
+            "GET"
+          )) || [];
+        if (!ignore) setComments(data);
       } catch {
         toast.error("Failed to load comments");
       }
     })();
+    return () => {
+      ignore = true;
+    };
   }, [post.id, request]);
 
-  // likes count
-  useEffect(() => {
-    (async () => {
+  // likes count (support either likesCount or unlikesCount route)
+  async function refreshLikesCount() {
+    try {
       try {
         const res = await request(
           `/api/v1/likes/post/${post.id}/likesCount`,
           "GET"
         );
         setLikesCount(parseCount(res));
-      } catch (err) {
-        console.error(err);
+      } catch {
+        const res = await request(
+          `/api/v1/likes/post/${post.id}/unlikesCount`,
+          "GET"
+        );
+        setLikesCount(parseCount(res));
       }
-    })();
-  }, [post.id, request]);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  useEffect(() => {
+    refreshLikesCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id]);
 
-  // like / unlike (same endpoints you had, plus safety)
+  // like / unlike
   const handleLike = async () => {
     if (likeBusy) return;
-    if (!userId) {
-      toast.error("Please log in again.");
-      return;
-    }
-    setLikeBusy(true);
+    if (!userId) return toast.error("Please log in again.");
 
+    setLikeBusy(true);
     const prevLiked = isLiked;
     const prevCount = likesCount;
 
@@ -121,39 +127,19 @@ export default function PostCard({ post }) {
 
     try {
       if (!prevLiked) {
-        // like
         await request(`/api/v1/likes/like`, "POST", {
           userId,
           postId: post.id,
         });
       } else {
-        // unlike (first try the original POST; if API expects DELETE, fallback)
-        try {
-          await request(`/api/v1/likes/unlike`, "POST", {
-            userId,
-            postId: post.id,
-          });
-        } catch {
-          await request(
-            `/api/v1/likes/unlike?userId=${userId}&postId=${post.id}`,
-            "DELETE"
-          );
-        }
+        await request(`/api/v1/likes/unlike`, "POST", {
+          userId,
+          postId: post.id,
+        });
       }
-
-      // refresh server count to avoid drift
-      try {
-        const fresh = await request(
-          `/api/v1/likes/post/${post.id}/likesCount`,
-          "GET"
-        );
-        setLikesCount(parseCount(fresh));
-      } catch {
-        console.error("Failed to refresh likes count");
-      }
+      await refreshLikesCount();
     } catch (err) {
       console.error(err);
-      // revert on failure
       setIsLiked(prevLiked);
       setLikesCount(prevCount);
       toast.error("Failed to update like status");
@@ -162,6 +148,7 @@ export default function PostCard({ post }) {
     }
   };
 
+  // add comment (append locally; keep panel open)
   const handleCommentSubmit = async (id) => {
     if (!newComment.trim()) return;
     try {
@@ -170,14 +157,14 @@ export default function PostCard({ post }) {
         "POST",
         { content: newComment }
       );
-      const author = await request(`/api/v1/user/${created.userId}`, "GET");
-      setComments((prev) => [...prev, { ...created, author }]);
+      setComments((prev) => [...prev, created]);
       setNewComment("");
     } catch {
       toast.error("Failed to post comment");
     }
   };
 
+  // TTS
   const handleReadAloud = () => {
     if (isSpeaking) {
       window.speechSynthesis.cancel();
@@ -187,7 +174,7 @@ export default function PostCard({ post }) {
     const speech = new SpeechSynthesisUtterance(
       `${post.title ?? ""}. ${post.content ?? ""}`
     );
-    const voice = voices.find((v) => v.lang.startsWith("en"));
+    const voice = voices.find((v) => v.lang && v.lang.startsWith("en"));
     if (voice) speech.voice = voice;
     speech.onend = () => setIsSpeaking(false);
     speech.onerror = () => setIsSpeaking(false);
@@ -212,9 +199,6 @@ export default function PostCard({ post }) {
       console.error(e);
       toast.error("Failed to update post");
     }
-  };
-  const deletePost = async () => {
-    toast.info("Coming soon...");
   };
 
   const startEditComment = (c) => {
@@ -244,11 +228,10 @@ export default function PostCard({ post }) {
   const removeComment = async (c) => {
     try {
       await request(`/api/v1/comments/${c.id}/delete`, "DELETE");
-      setComments((prev) => prev.filter((x) => x.id !== c.id));
-      toast.success("Comment deleted");
-    } catch {
-      toast.error("Failed to delete comment");
+    } catch (err) {
+      console.log(err);
     }
+    setComments((prev) => prev.filter((x) => x.id !== c.id));
   };
 
   return (
@@ -266,17 +249,13 @@ export default function PostCard({ post }) {
           <div className="min-w-0">
             <Card.Title className="mb-1">{post.title}</Card.Title>
             <div className="d-flex align-items-center gap-2 border-bottom border-white/25 pb-1">
-              <h6 className="mb-0 truncate">
-                {firstName} {lastName}
-              </h6>
-              <small className="opacity-75">{post.username}</small>
+              {/* show ONLY the author's username */}
+              <h6 className="mb-0 truncate">{post.username}</h6>
             </div>
           </div>
 
           <div className="d-flex align-items-center gap-2">
-            <small className="opacity-75">
-              {new Date(post.createdAt).toLocaleDateString()}
-            </small>
+            <small className="opacity-75">{fmtDate(post.createdAt)}</small>
             {isMyPost && (
               <Dropdown align="end">
                 <Dropdown.Toggle variant="link" className="text-white p-0">
@@ -286,8 +265,8 @@ export default function PostCard({ post }) {
                   <Dropdown.Item onClick={openEditPost}>
                     Edit Post
                   </Dropdown.Item>
-                  <Dropdown.Item onClick={deletePost} className="text-danger">
-                    Delete Post
+                  <Dropdown.Item className="text-danger" disabled>
+                    Delete Post (soon)
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown>
@@ -315,7 +294,7 @@ export default function PostCard({ post }) {
           <Button
             variant={showComments ? "light" : "outline-light"}
             size="sm"
-            onClick={() => setShowComments(!showComments)}
+            onClick={() => setShowComments((v) => !v)}
             className="d-flex align-items-center gap-1 rounded-pill"
           >
             <Chat />
@@ -332,17 +311,18 @@ export default function PostCard({ post }) {
           </Button>
         </div>
 
-        <Collapse in={showComments}>
+        {/* Keep content mounted; avoid flicker */}
+        <Collapse in={showComments} mountOnEnter>
           <div className="mt-3">
             <div className="mb-3 d-flex flex-column gap-2">
-              {comments.map((comment) => {
-                const mine = Number(comment.userId) === Number(userId);
+              {comments.map((c) => {
+                const mine = Number(c.userId) === Number(userId);
                 return (
-                  <div key={comment.id} className="p-3 rounded-3 glass">
+                  <div key={c.id} className="p-3 rounded-3 glass">
                     <div className="d-flex align-items-start gap-2 mb-1">
-                      {comment.author?.profilePhoto ? (
+                      {c.author?.profilePhoto ? (
                         <Image
-                          src={`data:image/jpg;base64,${comment.author.profilePhoto}`}
+                          src={`data:image/jpg;base64,${c.author.profilePhoto}`}
                           roundedCircle
                           width={30}
                           height={30}
@@ -353,16 +333,18 @@ export default function PostCard({ post }) {
                       <div className="flex-grow-1">
                         <div className="d-flex align-items-center">
                           <strong>
-                            {comment.author
-                              ? `${comment.author.firstName} ${comment.author.lastName}`
+                            {c.author
+                              ? `${c.author.firstName ?? ""} ${
+                                  c.author.lastName ?? ""
+                                }`.trim() || c.author.username
                               : "Unknown"}
                           </strong>
                           <small className="opacity-75 ms-2">
-                            {new Date(comment.createdAt).toLocaleDateString()}
+                            {fmtDate(c.createdAt)}
                           </small>
                         </div>
 
-                        {editingCommentId === comment.id ? (
+                        {editingCommentId === c.id ? (
                           <div className="mt-2">
                             <Form.Control
                               as="textarea"
@@ -375,7 +357,7 @@ export default function PostCard({ post }) {
                               <Button
                                 size="sm"
                                 variant="light"
-                                onClick={() => saveEditComment(comment)}
+                                onClick={() => saveEditComment(c)}
                               >
                                 Save
                               </Button>
@@ -390,12 +372,12 @@ export default function PostCard({ post }) {
                           </div>
                         ) : (
                           <p className="mb-0 whitespace-pre-wrap">
-                            {comment.content}
+                            {c.content}
                           </p>
                         )}
                       </div>
 
-                      {mine && editingCommentId !== comment.id && (
+                      {mine && editingCommentId !== c.id && (
                         <Dropdown align="end">
                           <Dropdown.Toggle
                             variant="link"
@@ -404,14 +386,12 @@ export default function PostCard({ post }) {
                             <ThreeDots />
                           </Dropdown.Toggle>
                           <Dropdown.Menu className="px-2">
-                            <Dropdown.Item
-                              onClick={() => startEditComment(comment)}
-                            >
+                            <Dropdown.Item onClick={() => startEditComment(c)}>
                               Edit
                             </Dropdown.Item>
                             <Dropdown.Item
                               className="text-danger"
-                              onClick={() => removeComment(comment)}
+                              onClick={() => removeComment(c)}
                             >
                               Delete
                             </Dropdown.Item>
