@@ -15,8 +15,9 @@ export default function HomePage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await request("/api/v1/posts", "GET");
-        setPosts(Array.isArray(data) ? data : []);
+        const { data } = await request("/api/v1/posts", "GET");
+        console.log(data);
+        setPosts(data);
       } catch {
         toast.error("Failed to load posts");
       }
