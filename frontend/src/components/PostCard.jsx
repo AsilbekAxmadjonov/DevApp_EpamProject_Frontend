@@ -30,19 +30,15 @@ function fmtDate(v) {
 }
 
 export default function PostCard({ post }) {
-  // ----- state -----
   const [comments, setComments] = useState([]);
-  const [showComments, setShowComments] = useState(false);
-  const [hasLoadedComments, setHasLoadedComments] = useState(false);
-  const [newComment, setNewComment] = useState("");
-
   const [likesCount, setLikesCount] = useState(Number(post.likes) || 0);
   const [isLiked, setIsLiked] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
 
+  const [showComments, setShowComments] = useState(false);
+  const [newComment, setNewComment] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState([]);
-
   const [editPostOpen, setEditPostOpen] = useState(false);
   const [editPostText, setEditPostText] = useState(post.content || "");
 
@@ -55,7 +51,6 @@ export default function PostCard({ post }) {
   const isMyPost =
     Number(post.userId) === Number(userId) || post.username === username;
 
-  // helpers
   const parseCount = (v) => {
     if (Number.isFinite(v)) return v;
     if (typeof v === "string" && !Number.isNaN(+v)) return +v;
@@ -64,7 +59,7 @@ export default function PostCard({ post }) {
     return 0;
   };
 
-  // ----- voices -----
+  // voices
   useEffect(() => {
     const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
     loadVoices();
@@ -72,7 +67,27 @@ export default function PostCard({ post }) {
     return () => (window.speechSynthesis.onvoiceschanged = null);
   }, []);
 
-  // ----- likes count -----
+  // load comments once per post (no flicker)
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const data =
+          (await request(
+            `/api/v1/comments/posts/${post.id}/getCommentsByPost`,
+            "GET"
+          )) || [];
+        if (!ignore) setComments(data);
+      } catch {
+        toast.error("Failed to load comments");
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [post.id, request]);
+
+  // likes count (support either likesCount or unlikesCount route)
   async function refreshLikesCount() {
     try {
       try {
@@ -97,40 +112,7 @@ export default function PostCard({ post }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
 
-  // ----- comments: load only when opened the first time -----
-  useEffect(() => {
-    // when post changes, reset the cache & UI
-    setComments([]);
-    setHasLoadedComments(false);
-    setShowComments(false);
-  }, [post.id]);
-
-  useEffect(() => {
-    if (!showComments || hasLoadedComments) return;
-
-    let aborted = false;
-    (async () => {
-      try {
-        const data =
-          (await request(
-            `/api/v1/comments/posts/${post.id}/getCommentsByPost`,
-            "GET"
-          )) || [];
-        if (!aborted) {
-          setComments(Array.isArray(data) ? data : []);
-          setHasLoadedComments(true);
-        }
-      } catch {
-        if (!aborted) toast.error("Failed to load comments");
-      }
-    })();
-
-    return () => {
-      aborted = true;
-    };
-  }, [showComments, hasLoadedComments, post.id, request]);
-
-  // ----- like / unlike -----
+  // like / unlike
   const handleLike = async () => {
     if (likeBusy) return;
     if (!userId) return toast.error("Please log in again.");
@@ -166,7 +148,7 @@ export default function PostCard({ post }) {
     }
   };
 
-  // ----- add / edit / delete comment -----
+  // add comment (append locally; keep panel open)
   const handleCommentSubmit = async (id) => {
     if (!newComment.trim()) return;
     try {
@@ -176,10 +158,46 @@ export default function PostCard({ post }) {
         { content: newComment }
       );
       setComments((prev) => [...prev, created]);
-      setHasLoadedComments(true);
       setNewComment("");
     } catch {
       toast.error("Failed to post comment");
+    }
+  };
+
+  // TTS
+  const handleReadAloud = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    const speech = new SpeechSynthesisUtterance(
+      `${post.title ?? ""}. ${post.content ?? ""}`
+    );
+    const voice = voices.find((v) => v.lang && v.lang.startsWith("en"));
+    if (voice) speech.voice = voice;
+    speech.onend = () => setIsSpeaking(false);
+    speech.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(speech);
+    setIsSpeaking(true);
+  };
+
+  const openEditPost = () => {
+    setEditPostText(post.content || "");
+    setEditPostOpen(true);
+  };
+  const saveEditPost = async () => {
+    try {
+      const updated = await request(`/api/v1/posts/${post.id}`, "PUT", {
+        userId,
+        content: editPostText,
+      });
+      post.content = updated?.content ?? editPostText;
+      setEditPostOpen(false);
+      toast.success("Post updated");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update post");
     }
   };
 
@@ -216,84 +234,38 @@ export default function PostCard({ post }) {
     setComments((prev) => prev.filter((x) => x.id !== c.id));
   };
 
-  // ----- TTS -----
-  const handleReadAloud = () => {
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      return;
-    }
-    const speech = new SpeechSynthesisUtterance(
-      `${post.title ?? ""}. ${post.content ?? ""}`
-    );
-    const voice = voices.find((v) => v.lang && v.lang.startsWith("en"));
-    if (voice) speech.voice = voice;
-    speech.onend = () => setIsSpeaking(false);
-    speech.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(speech);
-    setIsSpeaking(true);
-  };
-
-  // ----- edit post -----
-  const openEditPost = () => {
-    setEditPostText(post.content || "");
-    setEditPostOpen(true);
-  };
-  const saveEditPost = async () => {
-    try {
-      const updated = await request(`/api/v1/posts/${post.id}`, "PUT", {
-        userId,
-        content: editPostText,
-      });
-      post.content = updated?.content ?? editPostText;
-      setEditPostOpen(false);
-      toast.success("Post updated");
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to update post");
-    }
-  };
-
-  // ----- render -----
   return (
-    <Card
-      style={{ backgroundColor: "rgba(255,255,255,0.10)" }}
-      bg="transparent"
-      className="border-0 text-white max-w-[600px] w-full mx-auto rounded-2xl bg-white/10 backdrop-blur-xl shadow-lg ring-1 ring-white/10"
-    >
-      <Card.Body className="p-5">
-        <div className="flex justify-between items-start mb-3">
+    <Card className="shadow-lg border-0 glass text-white max-w-[500px] w-full mx-auto">
+      {post.image && (
+        <Card.Img
+          style={{ width: "100%", objectFit: "cover", maxHeight: "320px" }}
+          variant="top"
+          src={`data:image/jpg;base64,${post.image}`}
+        />
+      )}
+
+      <Card.Body>
+        <div className="d-flex justify-content-between align-items-start mb-2">
           <div className="min-w-0">
-            <Card.Title className="mb-1 text-xl font-semibold truncate">
-              {post.title}
-            </Card.Title>
-            <div className="flex items-center gap-2 border-b border-white/20 pb-1">
+            <Card.Title className="mb-1">{post.title}</Card.Title>
+            <div className="d-flex align-items-center gap-2 border-bottom border-white/25 pb-1">
               {/* show ONLY the author's username */}
-              <h6 className="mb-0 truncate text-white/90">{post.username}</h6>
+              <h6 className="mb-0 truncate">{post.username}</h6>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="d-flex align-items-center gap-2">
             <small className="opacity-75">{fmtDate(post.createdAt)}</small>
             {isMyPost && (
               <Dropdown align="end">
-                <Dropdown.Toggle
-                  variant="link"
-                  className="text-white p-0 hover:opacity-80"
-                >
+                <Dropdown.Toggle variant="link" className="text-white p-0">
                   <ThreeDots />
                 </Dropdown.Toggle>
-                <Dropdown.Menu className="px-2 rounded-xl bg-white/10 backdrop-blur-xl ring-1 ring-white/10 text-white">
-                  <Dropdown.Item
-                    onClick={openEditPost}
-                    className="rounded-lg text-white hover:bg-white/20"
-                  >
+                <Dropdown.Menu className="px-2">
+                  <Dropdown.Item onClick={openEditPost}>
                     Edit Post
                   </Dropdown.Item>
-                  <Dropdown.Item
-                    className="rounded-lg text-red-300 hover:bg-white/20"
-                    disabled
-                  >
+                  <Dropdown.Item className="text-danger" disabled>
                     Delete Post (soon)
                   </Dropdown.Item>
                 </Dropdown.Menu>
@@ -302,18 +274,18 @@ export default function PostCard({ post }) {
           </div>
         </div>
 
-        <Card.Text className="mb-4 opacity-95 whitespace-pre-wrap">
+        <Card.Text className="mb-3 opacity-95 whitespace-pre-wrap">
           {post.content}
         </Card.Text>
 
-        <div className="flex gap-2 mb-2">
+        <div className="d-flex gap-2 mb-2">
           <Button
             variant={isLiked ? "light" : "outline-light"}
             size="sm"
             onClick={handleLike}
             disabled={likeBusy}
             aria-pressed={isLiked}
-            className="flex items-center gap-1 rounded-full px-3"
+            className="d-flex align-items-center gap-1 rounded-pill"
           >
             {isLiked ? <HeartFill /> : <Heart />}
             <span>{likesCount}</span>
@@ -323,7 +295,7 @@ export default function PostCard({ post }) {
             variant={showComments ? "light" : "outline-light"}
             size="sm"
             onClick={() => setShowComments((v) => !v)}
-            className="flex items-center gap-1 rounded-full px-3"
+            className="d-flex align-items-center gap-1 rounded-pill"
           >
             <Chat />
             <span>{comments.length}</span>
@@ -333,48 +305,40 @@ export default function PostCard({ post }) {
             variant={isSpeaking ? "light" : "outline-light"}
             size="sm"
             onClick={handleReadAloud}
-            className="flex items-center rounded-full px-3"
+            className="d-flex align-items-center rounded-pill"
           >
             {isSpeaking ? <VolumeMute /> : <VolumeUp />}
           </Button>
         </div>
 
-        {/* Keep mounted so list doesn't reset; load only on first open */}
-        <Collapse in={showComments} mountOnEnter unmountOnExit={false}>
-          <div className="mt-4">
-            <div className="mb-3 flex flex-col gap-2">
+        {/* Keep content mounted; avoid flicker */}
+        <Collapse in={showComments} mountOnEnter>
+          <div className="mt-3">
+            <div className="mb-3 d-flex flex-column gap-2">
               {comments.map((c) => {
                 const mine = Number(c.userId) === Number(userId);
-                const authorName =
-                  (c.author &&
-                    (`${c.author.firstName ?? ""} ${
-                      c.author.lastName ?? ""
-                    }`.trim() ||
-                      c.author.username)) ||
-                  c.username ||
-                  (c.user && c.user.username) ||
-                  "Unknown";
-
                 return (
-                  <div
-                    key={c.id}
-                    className="p-3 rounded-xl bg-white/10 ring-1 ring-white/10"
-                  >
-                    <div className="flex items-start gap-2 mb-1">
+                  <div key={c.id} className="p-3 rounded-3 glass">
+                    <div className="d-flex align-items-start gap-2 mb-1">
                       {c.author?.profilePhoto ? (
                         <Image
                           src={`data:image/jpg;base64,${c.author.profilePhoto}`}
                           roundedCircle
                           width={30}
                           height={30}
-                          className="object-cover"
                         />
                       ) : (
                         <PersonCircle size={30} className="opacity-75" />
                       )}
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          <strong>{authorName}</strong>
+                      <div className="flex-grow-1">
+                        <div className="d-flex align-items-center">
+                          <strong>
+                            {c.author
+                              ? `${c.author.firstName ?? ""} ${
+                                  c.author.lastName ?? ""
+                                }`.trim() || c.author.username
+                              : "Unknown"}
+                          </strong>
                           <small className="opacity-75 ms-2">
                             {fmtDate(c.createdAt)}
                           </small>
@@ -387,12 +351,12 @@ export default function PostCard({ post }) {
                               rows={2}
                               value={editingText}
                               onChange={(e) => setEditingText(e.target.value)}
-                              className="bg-white/10 text-white border border-white/30 rounded-lg focus:ring-0 focus:border-white/50"
+                              className="bg-transparent text-white"
                             />
-                            <div className="flex gap-2 mt-2">
+                            <div className="d-flex gap-2 mt-2">
                               <Button
                                 size="sm"
-                                className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-900 border-0"
+                                variant="light"
                                 onClick={() => saveEditComment(c)}
                               >
                                 Save
@@ -400,7 +364,6 @@ export default function PostCard({ post }) {
                               <Button
                                 size="sm"
                                 variant="outline-light"
-                                className="rounded-full"
                                 onClick={cancelEditComment}
                               >
                                 Cancel
@@ -422,15 +385,12 @@ export default function PostCard({ post }) {
                           >
                             <ThreeDots />
                           </Dropdown.Toggle>
-                          <Dropdown.Menu className="px-2 rounded-xl bg-white/10 backdrop-blur-xl ring-1 ring-white/10 text-white">
-                            <Dropdown.Item
-                              onClick={() => startEditComment(c)}
-                              className="rounded-lg text-white hover:bg-white/20"
-                            >
+                          <Dropdown.Menu className="px-2">
+                            <Dropdown.Item onClick={() => startEditComment(c)}>
                               Edit
                             </Dropdown.Item>
                             <Dropdown.Item
-                              className="rounded-lg text-red-300 hover:bg-white/20"
+                              className="text-danger"
                               onClick={() => removeComment(c)}
                             >
                               Delete
@@ -457,13 +417,13 @@ export default function PostCard({ post }) {
                   placeholder="Write a comment..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  className="rounded-xl bg-white/10 text-white border border-white/30 focus:ring-0 focus:border-white/50"
+                  className="rounded-3 bg-transparent text-white"
                 />
               </Form.Group>
               <Button
                 type="submit"
                 size="sm"
-                className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-900 border-0"
+                className="rounded-pill btn-gradient"
               >
                 Post Comment
               </Button>
@@ -472,43 +432,29 @@ export default function PostCard({ post }) {
         </Collapse>
       </Card.Body>
 
-      {/* Edit Post Modal — Tailwind glass */}
-      <Modal
-        show={editPostOpen}
-        onHide={() => setEditPostOpen(false)}
-        centered
-        contentClassName="bg-white/10 backdrop-blur-xl text-white rounded-2xl border border-white/15"
-      >
-        <Modal.Header
-          closeButton
-          className="border-white/10 text-white rounded-t-2xl"
-        >
+      <Modal show={editPostOpen} onHide={() => setEditPostOpen(false)} centered>
+        <Modal.Header closeButton>
           <Modal.Title>Edit Post</Modal.Title>
         </Modal.Header>
-        <Modal.Body className="space-y-3">
+        <Modal.Body>
           <Form.Group>
-            <Form.Label className="text-white/80">Content</Form.Label>
+            <Form.Label>Content</Form.Label>
             <Form.Control
               as="textarea"
               rows={6}
               value={editPostText}
               onChange={(e) => setEditPostText(e.target.value)}
-              className="bg-white/10 text-white border border-white/30 rounded-xl focus:ring-0 focus:border-white/50"
             />
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer className="border-white/10">
+        <Modal.Footer>
           <Button
-            variant="outline-light"
-            className="rounded-full"
+            variant="outline-secondary"
             onClick={() => setEditPostOpen(false)}
           >
             Cancel
           </Button>
-          <Button
-            className="rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-slate-900 border-0"
-            onClick={saveEditPost}
-          >
+          <Button variant="primary" onClick={saveEditPost}>
             Save
           </Button>
         </Modal.Footer>
