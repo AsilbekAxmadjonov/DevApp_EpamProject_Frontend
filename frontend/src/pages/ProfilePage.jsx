@@ -102,7 +102,7 @@ export default function ProfilePage() {
   return (
     <Container className="py-6">
       {/* Header */}
-      <div className="text-gray-700 rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
+      <div className="text-white rounded-3xl p-6 mb-6 bg-white/5 backdrop-blur-xl ring-1 ring-white/10">
         <div className="flex items-center gap-8">
           <div className="relative">
             {avatarSrc ? (
@@ -141,7 +141,7 @@ export default function ProfilePage() {
               <div className="font-semibold">
                 {`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()}
               </div>
-              {user?.bio && <div className="text-gray-700">{user.bio}</div>}
+              {user?.bio && <div className="text-white">{user.bio}</div>}
             </div>
           </div>
         </div>
@@ -156,7 +156,7 @@ export default function ProfilePage() {
           />
         ))}
         {posts.length === 0 && (
-          <div className="text-center text-gray-700/70 py-10">No posts yet.</div>
+          <div className="text-center text-white/70 py-10">No posts yet.</div>
         )}
       </div>
 
