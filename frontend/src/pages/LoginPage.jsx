@@ -56,7 +56,10 @@ export default function LoginPage() {
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center p-3">
       <Container className="d-flex align-items-center justify-content-center">
-        <Card className="glass p-4 text-white" style={{ width: 420 }}>
+        <Card
+          style={{ backgroundColor: "rgba(255,255,255,0.10)", width: 420 }}
+          className="glass p-4 text-white"
+        >
           <Card.Body>
             <h2 className="text-center mb-4 fw-bold">Welcome to DevLogs</h2>
             <Form onSubmit={handleLogin}>

@@ -256,8 +256,11 @@ export default function PostCard({ post }) {
 
   // ----- render -----
   return (
-    <Card className="border-0 text-white max-w-[600px] w-full mx-auto rounded-2xl bg-white/10 backdrop-blur-xl shadow-lg ring-1 ring-white/10">
-
+    <Card
+      style={{ backgroundColor: "rgba(255,255,255,0.10)" }}
+      bg="transparent"
+      className="border-0 text-white max-w-[600px] w-full mx-auto rounded-2xl bg-white/10 backdrop-blur-xl shadow-lg ring-1 ring-white/10"
+    >
       <Card.Body className="p-5">
         <div className="flex justify-between items-start mb-3">
           <div className="min-w-0">
