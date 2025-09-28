@@ -19,7 +19,7 @@ export default function RightSidebar() {
           `/api/v1/posts/getAllPostsByUserId?id=${userId}`,
           "GET"
         );
-        setPosts(Array.isArray(myPosts) ? myPosts : []);
+        setPosts(Array.isArray(myPosts) ? myPosts : myPosts?.data ?? []);
       } catch {
         /* ignore */
       }

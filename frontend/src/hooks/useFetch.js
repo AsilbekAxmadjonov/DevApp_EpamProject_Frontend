@@ -44,6 +44,7 @@ export const useFetch = () => {
           body: payload,
         });
 
+        console.log(res);
         const ct = res.headers.get("content-type") || "";
         let data = null;
         if (ct.includes("application/json"))
@@ -61,6 +62,14 @@ export const useFetch = () => {
           throw err;
         }
 
+        // just before `return data;`
+        if (res.ok && data && typeof data === "object" && "data" in data) {
+          // unwrap common envelope shape
+          // @ts-ignore
+          return data.data;
+        }
+
+        console.log(data);
         return data;
       } catch (err) {
         setError(err.message || "Unexpected error");

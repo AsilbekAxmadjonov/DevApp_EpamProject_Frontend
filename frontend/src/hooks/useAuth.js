@@ -19,6 +19,8 @@ export const useAuth = () => {
         lastName: lName,
       })
     );
+    const user = localStorage.getItem("authData");
+    console.log(user);
     setToken(jwt);
     setUserId(id);
     setUsername(uname);
